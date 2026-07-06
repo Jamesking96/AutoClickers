@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-DEFAULT_HOTKEY = "alt+f6"
+DEFAULT_HOTKEY = "f6"
 DEFAULT_THEME = "Windows XP"
 THEMES: dict[str, dict[str, str | list[str]]] = {
 	"Windows XP": {
@@ -88,7 +88,7 @@ def _interpolate_color(start: str, end: str, ratio: float) -> str:
 
 
 def normalize_hotkey(value: str) -> str:
-	"""Convert user-friendly hotkeys like 'alt+f6' into pynput GlobalHotKeys syntax."""
+	"""Convert user-friendly hotkeys like 'f6' into pynput GlobalHotKeys syntax."""
 	token_map = {
 		"alt": "<alt>",
 		"ctrl": "<ctrl>",
@@ -434,7 +434,7 @@ class AutoClickerUIBase:
 	def set_status(self, is_on: bool) -> None:
 		self.status_text_var.set("Running" if is_on else "Stopped")
 
-	def build_hotkey_controls(self, parent, apply_command, revert_command, label_text: str = "Toggle hotkey (default Alt+F6):"):
+	def build_hotkey_controls(self, parent, apply_command, revert_command, label_text: str = "Toggle hotkey (default F6):"):
 		ttk.Label(parent, text=label_text, style="XP.TLabel").pack(anchor="w")
 		hotkey_row = ttk.Frame(parent, style="XP.TFrame")
 		hotkey_row.pack(fill="x", pady=(0, 8))

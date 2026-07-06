@@ -8,7 +8,7 @@ from ..mouse_auto_clicker import mouse_button_to_text
 
 class NormalizeHotkeyTests(unittest.TestCase):
     def test_default_shortcut(self) -> None:
-        self.assertEqual(normalize_hotkey("alt+f6"), "<alt>+<f6>")
+        self.assertEqual(normalize_hotkey("f6"), "<alt>+<f6>")
 
     def test_single_letter(self) -> None:
         self.assertEqual(normalize_hotkey("ctrl+k"), "<ctrl>+k")

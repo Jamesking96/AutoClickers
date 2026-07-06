@@ -6,7 +6,7 @@ from tkinter import messagebox, ttk
 from pynput import keyboard
 
 
-DEFAULT_HOTKEY = "alt+f6"
+DEFAULT_HOTKEY = "f6"
 XP_BG = "#ece9d8"
 XP_BUTTON_BG = "#f1efe2"
 XP_BORDER = "#7f9db9"
@@ -272,7 +272,7 @@ class KeyboardAutoClickerApp:
 
         ttk.Separator(outer, style="XP.TSeparator").pack(fill="x", pady=8)
 
-        ttk.Label(outer, text="Toggle hotkey (default Alt+F6):", style="XP.TLabel").pack(anchor="w")
+        ttk.Label(outer, text="Toggle hotkey (default F6):", style="XP.TLabel").pack(anchor="w")
         hotkey_row = ttk.Frame(outer, style="XP.TFrame")
         hotkey_row.pack(fill="x", pady=(0, 8))
         self.hotkey_entry = ttk.Entry(hotkey_row, textvariable=self.hotkey_text_var, style="XP.TEntry")

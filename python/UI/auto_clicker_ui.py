@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
+import json
+from pathlib import Path
 
 
 DEFAULT_HOTKEY = "alt+f6"
@@ -175,6 +177,7 @@ class AutoClickerUIBase:
 		self.hotkey_text_var = tk.StringVar(value=DEFAULT_HOTKEY)
 		self.status_text_var = tk.StringVar(value="Stopped")
 		self.theme_name_var = tk.StringVar(value=DEFAULT_THEME)
+		self.theme_pref_file = Path(__file__).parent / "theme_preference.json"
 		self.hotkey_capture_active = False
 		self.hotkey_capture_tokens: list[str] = []
 		self.hotkey_pressed_tokens: set[str] = set()
@@ -185,11 +188,17 @@ class AutoClickerUIBase:
 		self.root_canvas = tk.Canvas(self.root, highlightthickness=0, borderwidth=0)
 		self.root_canvas.pack(fill="both", expand=True)
 		self.root_canvas.bind("<Configure>", self._on_canvas_resize)
-		# Use tk.Frame with no background so gradient shows through
+		# NOTE: tk.Frame does NOT support transparency in tkinter — background="" maps to the
+		# system-default colour, not "transparent".  For solid themes the frame fills the canvas
+		# and its background matches colours["bg"] perfectly.  For gradient themes the frame is
+		# inset by _GRADIENT_MARGIN pixels on every side so the gradient canvas shows through
+		# as a visible border around the content panel.
+		self._GRADIENT_MARGIN = 16
 		self.root_content_frame = tk.Frame(self.root_canvas, background="")
 		self.root_content_window = self.root_canvas.create_window(0, 0, anchor="nw", window=self.root_content_frame)
 		self._inner_content_frame = None
 
+		self._load_saved_theme()
 		self._apply_theme(self.theme_name_var.get())
 
 	def build_root_container(self, padding: int = 12):
@@ -201,8 +210,38 @@ class AutoClickerUIBase:
 		return self._inner_content_frame
 
 	def _on_canvas_resize(self, event) -> None:
-		self.root_canvas.itemconfigure(self.root_content_window, width=event.width, height=event.height)
+		self._resize_content_window(event.width, event.height)
 		self._redraw_background(event.width, event.height)
+
+	def _resize_content_window(self, canvas_w: int, canvas_h: int) -> None:
+		"""Position and size the embedded content window.
+
+		For solid themes the content fills the entire canvas so its background
+		colour is seamless with the canvas background.  For gradient themes the
+		window is inset by *_GRADIENT_MARGIN* pixels on every side, leaving a
+		visible gradient border around the content panel.
+		"""
+		has_gradient = (
+			isinstance(self._active_theme_colors.get("bg_gradient"), list)
+			and len(self._active_theme_colors["bg_gradient"]) >= 2
+		)
+		if has_gradient:
+			m = self._GRADIENT_MARGIN
+			self.root_canvas.coords(self.root_content_window, m, m)
+			self.root_canvas.itemconfigure(
+				self.root_content_window,
+				anchor="nw",
+				width=max(canvas_w - 2 * m, 1),
+				height=max(canvas_h - 2 * m, 1),
+			)
+		else:
+			self.root_canvas.coords(self.root_content_window, 0, 0)
+			self.root_canvas.itemconfigure(
+				self.root_content_window,
+				anchor="nw",
+				width=max(canvas_w, 1),
+				height=max(canvas_h, 1),
+			)
 
 	def _redraw_background(self, width: int, height: int) -> None:
 		width = max(1, width)
@@ -235,7 +274,13 @@ class AutoClickerUIBase:
 		self.theme_name_var.set(theme_name if theme_name in THEMES else DEFAULT_THEME)
 		self.root.configure(background=colors["bg"])
 		self.root_canvas.configure(background=colors["bg"])
+		# Explicitly set root_content_frame background — background="" is NOT transparent
+		# in tkinter; it maps to the system-default colour, which breaks solid themes.
+		self.root_content_frame.configure(bg=colors["bg"])
 		self._redraw_background(self.root_canvas.winfo_width(), self.root_canvas.winfo_height())
+		# Re-apply content-window layout so switching between solid↔gradient themes
+		# immediately shows/hides the gradient border.
+		self._resize_content_window(self.root_canvas.winfo_width(), self.root_canvas.winfo_height())
 
 		self.style.configure(".", font=("Tahoma", 9))
 		# Root content frame uses tk.Frame with no background, inner frames use XP.TFrame
@@ -300,8 +345,36 @@ class AutoClickerUIBase:
 			style="XP.TCombobox",
 		)
 		theme_picker.pack(side="left", fill="x", expand=True)
-		theme_picker.bind("<<ComboboxSelected>>", lambda _event: self._apply_theme(self.theme_name_var.get()))
+		theme_picker.bind("<<ComboboxSelected>>", lambda _event: self._on_theme_changed())
 		return theme_picker
+
+	def _on_theme_changed(self) -> None:
+		"""Handle theme change: apply theme and save preference."""
+		self._apply_theme(self.theme_name_var.get())
+		self._save_theme_preference()
+
+	def _load_saved_theme(self) -> None:
+		"""Load the saved theme preference, or use default if not found."""
+		try:
+			if self.theme_pref_file.exists():
+				with open(self.theme_pref_file, "r") as f:
+					data = json.load(f)
+					theme_name = data.get("theme")
+					if theme_name and theme_name in THEMES:
+						self.theme_name_var.set(theme_name)
+						return
+		except Exception as e:
+			print(f"Error loading theme preference: {e}")
+		self.theme_name_var.set(DEFAULT_THEME)
+
+	def _save_theme_preference(self) -> None:
+		"""Save the current theme preference to file."""
+		try:
+			data = {"theme": self.theme_name_var.get()}
+			with open(self.theme_pref_file, "w") as f:
+				json.dump(data, f, indent=2)
+		except Exception as e:
+			print(f"Error saving theme preference: {e}")
 
 	def bring_window_to_front(self) -> None:
 		self.root.deiconify()

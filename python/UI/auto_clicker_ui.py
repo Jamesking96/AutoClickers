@@ -178,10 +178,13 @@ class AutoClickerUIBase:
 		self.status_text_var = tk.StringVar(value="Stopped")
 		self.theme_name_var = tk.StringVar(value=DEFAULT_THEME)
 		self.theme_pref_file = Path(__file__).parent / "theme_preference.json"
+		self._saved_preferences: dict[str, object] = {}
 		self.hotkey_capture_active = False
 		self.hotkey_capture_tokens: list[str] = []
 		self.hotkey_pressed_tokens: set[str] = set()
 		self.keep_window_on_top = False
+		self.selection_overlay_window: tk.Toplevel | None = None
+		self.settings_window: tk.Toplevel | None = None
 		self._active_theme_colors = THEMES[DEFAULT_THEME]
 
 		# Canvas-based background lets themes render either a solid color or a gradient.
@@ -305,6 +308,42 @@ class AutoClickerUIBase:
 			background=[("pressed", colors["button_pressed"]), ("active", colors["button_active"])],
 			bordercolor=[("pressed", colors["accent"]), ("active", colors["accent"])],
 		)
+		# Segmented/toggle control: a TRadiobutton restyled to look like a button.
+		# ttk has no indicatoron option, so the indicator element is dropped via a
+		# custom layout instead, leaving just the flat, label-only tab.
+		self.style.layout(
+			"XP.TRadiobutton",
+			[(
+				"Radiobutton.border",
+				{
+					"sticky": "nswe",
+					"children": [(
+						"Radiobutton.padding",
+						{"sticky": "nswe", "children": [("Radiobutton.label", {"sticky": "nswe"})]},
+					)],
+				},
+			)],
+		)
+		self.style.configure(
+			"XP.TRadiobutton",
+			background=colors["button_bg"],
+			foreground=colors["text"],
+			bordercolor=colors["border"],
+			lightcolor=colors["focus_light"],
+			darkcolor=colors["border"],
+			focusthickness=1,
+			focuscolor=colors["accent"],
+			padding=(8, 3),
+			relief="raised",
+			anchor="center",
+		)
+		self.style.map(
+			"XP.TRadiobutton",
+			background=[("selected", colors["accent"]), ("pressed", colors["button_pressed"]), ("active", colors["button_active"])],
+			foreground=[("selected", colors["bg"])],
+			relief=[("selected", "sunken")],
+			bordercolor=[("pressed", colors["accent"]), ("active", colors["accent"])],
+		)
 		self.style.configure(
 			"XP.TEntry",
 			fieldbackground=colors["entry_bg"],
@@ -332,6 +371,8 @@ class AutoClickerUIBase:
 			foreground=[("readonly", colors["text"])],
 			bordercolor=[("focus", colors["accent"])],
 		)
+		self.style.configure("XP.TCheckbutton", background=colors["bg"], foreground=colors["text"])
+		self.style.map("XP.TCheckbutton", foreground=[("disabled", colors["hint"])])
 
 	def build_theme_controls(self, parent, label_text: str = "Theme:"):
 		ttk.Label(parent, text=label_text, style="XP.TLabel").pack(anchor="w")
@@ -352,6 +393,77 @@ class AutoClickerUIBase:
 		"""Handle theme change: apply theme and save preference."""
 		self._apply_theme(self.theme_name_var.get())
 		self._save_theme_preference()
+		if self.settings_window is not None and self.settings_window.winfo_exists():
+			self.settings_window.configure(background=self._active_theme_colors["bg"])
+
+	def build_settings_button(self, parent, extra_content_builder=None) -> ttk.Button:
+		"""Add a small Settings button (top-right) that opens the settings overlay window."""
+		row = ttk.Frame(parent, style="XP.TFrame")
+		row.pack(fill="x", pady=(0, 6))
+		button = ttk.Button(
+			row,
+			text="Settings",
+			command=lambda: self.open_settings_window(extra_content_builder),
+			style="XP.TButton",
+			width=10,
+		)
+		button.pack(side="right")
+		return button
+
+	def open_settings_window(self, extra_content_builder=None, title: str = "Settings") -> None:
+		"""Open a modal window overlaying the app with theme controls and optional extras."""
+		if self.settings_window is not None and self.settings_window.winfo_exists():
+			self.settings_window.lift()
+			self.settings_window.focus_force()
+			return
+
+		window = tk.Toplevel(self.root)
+		self.settings_window = window
+		window.title(title)
+		window.transient(self.root)
+		window.resizable(False, False)
+		window.protocol("WM_DELETE_WINDOW", self.close_settings_window)
+		window.bind("<Escape>", lambda _event: self.close_settings_window())
+
+		colors = self._active_theme_colors
+		window.configure(background=colors["bg"])
+
+		body = ttk.Frame(window, style="XP.TFrame", padding=12)
+		body.pack(fill="both", expand=True)
+
+		self.build_theme_controls(body)
+
+		if extra_content_builder is not None:
+			extra_content_builder(body)
+
+		ttk.Button(body, text="Close", command=self.close_settings_window, style="XP.TButton").pack(
+			anchor="e",
+			pady=(12, 0),
+		)
+
+		window.update_idletasks()
+		width = window.winfo_reqwidth()
+		height = window.winfo_reqheight()
+		root_x = self.root.winfo_rootx()
+		root_y = self.root.winfo_rooty()
+		root_w = self.root.winfo_width()
+		root_h = self.root.winfo_height()
+		x = root_x + max((root_w - width) // 2, 0)
+		y = root_y + max((root_h - height) // 2, 0)
+		window.geometry(f"+{x}+{y}")
+		window.grab_set()
+		window.lift()
+		window.focus_force()
+
+	def close_settings_window(self) -> None:
+		if self.settings_window is None:
+			return
+
+		window = self.settings_window
+		self.settings_window = None
+		if window.winfo_exists():
+			window.grab_release()
+			window.destroy()
 
 	def _load_saved_theme(self) -> None:
 		"""Load the saved theme preference, or use default if not found."""
@@ -359,10 +471,12 @@ class AutoClickerUIBase:
 			if self.theme_pref_file.exists():
 				with open(self.theme_pref_file, "r") as f:
 					data = json.load(f)
-					theme_name = data.get("theme")
-					if theme_name and theme_name in THEMES:
-						self.theme_name_var.set(theme_name)
-						return
+					if isinstance(data, dict):
+						self._saved_preferences = data
+						theme_name = data.get("theme")
+						if theme_name and theme_name in THEMES:
+							self.theme_name_var.set(theme_name)
+							return
 		except Exception as e:
 			print(f"Error loading theme preference: {e}")
 		self.theme_name_var.set(DEFAULT_THEME)
@@ -370,9 +484,9 @@ class AutoClickerUIBase:
 	def _save_theme_preference(self) -> None:
 		"""Save the current theme preference to file."""
 		try:
-			data = {"theme": self.theme_name_var.get()}
+			self._saved_preferences["theme"] = self.theme_name_var.get()
 			with open(self.theme_pref_file, "w") as f:
-				json.dump(data, f, indent=2)
+				json.dump(self._saved_preferences, f, indent=2)
 		except Exception as e:
 			print(f"Error saving theme preference: {e}")
 
@@ -400,6 +514,64 @@ class AutoClickerUIBase:
 
 	def schedule_ui(self, delay_ms: int, callback) -> None:
 		self.root.after(delay_ms, lambda: callback())
+
+	def _get_virtual_screen_geometry(self) -> tuple[int, int, int, int]:
+		try:
+			import ctypes
+
+			user32 = ctypes.windll.user32
+			x = int(user32.GetSystemMetrics(76))
+			y = int(user32.GetSystemMetrics(77))
+			width = int(user32.GetSystemMetrics(78))
+			height = int(user32.GetSystemMetrics(79))
+			if width > 0 and height > 0:
+				return x, y, width, height
+		except Exception:
+			pass
+
+		return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+
+	def show_selection_overlay(self, message: str) -> None:
+		if self.selection_overlay_window is not None and self.selection_overlay_window.winfo_exists():
+			self.selection_overlay_window.destroy()
+
+		x, y, width, height = self._get_virtual_screen_geometry()
+		overlay = tk.Toplevel(self.root)
+		self.selection_overlay_window = overlay
+		overlay.overrideredirect(True)
+		overlay.attributes("-topmost", True)
+		overlay.attributes("-alpha", 0.35)
+		overlay.configure(background="#000000")
+		overlay.geometry(f"{width}x{height}+{x}+{y}")
+		overlay.bind("<Escape>", lambda _event: self.cancel_position_selection())
+		overlay.grab_set()
+		overlay.focus_force()
+
+		panel = tk.Frame(overlay, bg="#000000")
+		panel.place(relx=0.5, rely=0.5, anchor="center")
+		tk.Label(
+			panel,
+			text=message,
+			bg="#000000",
+			fg="#ffffff",
+			font=("Tahoma", 12, "bold"),
+			justify="center",
+			padx=24,
+			pady=18,
+		).pack()
+
+	def hide_selection_overlay(self) -> None:
+		if self.selection_overlay_window is None:
+			return
+
+		window = self.selection_overlay_window
+		self.selection_overlay_window = None
+		if window.winfo_exists():
+			try:
+				window.grab_release()
+			except tk.TclError:
+				pass
+			window.destroy()
 
 	def _begin_hotkey_capture(self, _event=None) -> None:
 		self.hotkey_capture_active = True

@@ -110,7 +110,7 @@ class KeyboardAutoClickerApp(AutoClickerUIBase):
     def _build_ui(self) -> None:
         outer = self.build_root_container(padding=12)
 
-        self.build_theme_controls(outer)
+        self.build_settings_button(outer)
 
         ttk.Label(outer, text="Press interval (milliseconds):", style="XP.TLabel").pack(anchor="w")
         ttk.Entry(outer, textvariable=self.interval_ms_var, style="XP.TEntry").pack(fill="x", pady=(0, 10))
@@ -349,6 +349,7 @@ class KeyboardAutoClickerApp(AutoClickerUIBase):
         self.shutdown_event.set()
         self.stop_pressing()
         self.cancel_key_selection()
+        self.close_settings_window()
 
         if self.hotkey_listener is not None:
             self.hotkey_listener.stop()

@@ -66,7 +66,7 @@ class MouseAutoClickerApp(AutoClickerUIBase):
     def _build_ui(self) -> None:
         outer = self.build_root_container(padding=12)
 
-        self.build_theme_controls(outer)
+        self.build_settings_button(outer)
 
         ttk.Label(outer, text="Click interval (milliseconds):", style="XP.TLabel").pack(anchor="w")
         ttk.Entry(outer, textvariable=self.interval_ms_var, style="XP.TEntry").pack(fill="x", pady=(0, 10))
@@ -144,6 +144,9 @@ class MouseAutoClickerApp(AutoClickerUIBase):
             self.selection_text_var.set(
                 "Selection already active: left-click anywhere to confirm a position, or right-click to cancel."
             )
+            self.show_selection_overlay(
+                "Mouse position selection is active.\n\nLeft-click anywhere to confirm a position.\nPress Esc to cancel."
+            )
             self.bring_window_to_front()
             return
 
@@ -152,6 +155,9 @@ class MouseAutoClickerApp(AutoClickerUIBase):
         self.set_position_button.state(["disabled"])
         self.selection_text_var.set(
             "Selection active: left-click anywhere to set the position, or right-click to cancel."
+        )
+        self.show_selection_overlay(
+            "Mouse position selection is active.\n\nLeft-click anywhere to confirm a position.\nPress Esc to cancel."
         )
         self.bring_window_to_front()
         self._start_selection_listeners()
@@ -171,12 +177,14 @@ class MouseAutoClickerApp(AutoClickerUIBase):
     def _finish_position_selection(self, message: str) -> None:
         self.position_selection_active.clear()
         self._stop_selection_listeners()
+        self.hide_selection_overlay()
         self.set_position_button.state(["!disabled"])
         self.selection_text_var.set(message)
         self.bring_window_to_front()
 
     def cancel_position_selection(self) -> None:
         if not self.position_selection_active.is_set():
+            self.hide_selection_overlay()
             return
         self._finish_position_selection("Position selection cancelled.")
 
@@ -303,6 +311,7 @@ class MouseAutoClickerApp(AutoClickerUIBase):
             # Capture position exactly at the left-click event and keep it fixed.
             self.pending_selection_position = self.mouse_controller.position
             self.selection_confirmation_pending.set()
+            self.hide_selection_overlay()
             self.schedule_ui(0, self._begin_position_confirmation)
 
     def _begin_position_confirmation(self) -> None:
@@ -432,6 +441,8 @@ class MouseAutoClickerApp(AutoClickerUIBase):
         self.stop_clicking()
         self.cancel_position_selection()
         self.cancel_button_selection()
+        self.hide_selection_overlay()
+        self.close_settings_window()
 
         if self.hotkey_listener is not None:
             self.hotkey_listener.stop()

@@ -9,7 +9,7 @@ block_cipher = None
 spec_dir = os.path.join(os.getcwd(), 'Tools', 'AutoClickers', 'python')
 
 a = Analysis(
-    ['mouse_auto_clicker.py'],
+    ['combined_auto_clicker.py'],
     pathex=[spec_dir],
     binaries=[],
     # Include the UI package - path is relative to spec file location
@@ -36,7 +36,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='mouse_auto_clicker',
+    name='combined_auto_clicker',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -48,6 +48,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(spec_dir, 'mouse_auto_clicker.ico') if os.path.exists(os.path.join(spec_dir, 'mouse_auto_clicker.ico')) else None,
+    icon=os.path.join(spec_dir, 'combined_auto_clicker.ico') if os.path.exists(os.path.join(spec_dir, 'combined_auto_clicker.ico')) else None,
 )
-

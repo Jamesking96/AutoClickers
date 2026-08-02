@@ -4,9 +4,9 @@ import sys
 
 block_cipher = None
 
-# Get the directory where the spec file is located
-# Note: In spec files, we use the current working directory as reference
-spec_dir = os.getcwd()
+# Resolve paths from the project root so builds work when launched from
+# d:\TechArt\Personal_Projects\Python.
+spec_dir = os.path.join(os.getcwd(), 'Tools', 'AutoClickers', 'python')
 
 a = Analysis(
     ['keyboard_auto_clicker.py'],
